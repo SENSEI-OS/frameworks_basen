@@ -80,8 +80,6 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceP
 import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.util.settings.SystemSettings;
 
-import lineageos.providers.LineageSettings;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -112,8 +110,6 @@ import javax.inject.Inject;
 @SysUISingleton
 public class ThemeOverlayController implements CoreStartable, Dumpable {
     protected static final String TAG = "ThemeOverlayController";
-    protected static final String OVERLAY_BERRY_BLACK_THEME =
-            "com.android.system.theme.black";
     private static final boolean DEBUG = true;
 
     protected static final int NEUTRAL = 0;
@@ -438,27 +434,6 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
                     }
                 },
                 UserHandle.USER_ALL);
-                
-                mSecureSettings.registerContentObserverForUser(
-                LineageSettings.Secure.getUriFor(LineageSettings.Secure.BERRY_BLACK_THEME),
-                false,
-                new ContentObserver(mBgHandler) {
-                    @Override
-                    public void onChange(boolean selfChange, Collection<Uri> collection, int flags,
-                            int userId) {
-                        if (DEBUG) Log.d(TAG, "Overlay changed for user: " + userId);
-                        if (mUserTracker.getUserId() != userId) {
-                            return;
-                        }
-                        if (!mDeviceProvisionedController.isUserSetup(userId)) {
-                            Log.i(TAG, "Theme application deferred when setting changed.");
-                            mDeferredThemeEvaluation = true;
-                            return;
-                        }
-                        reevaluateSystemTheme(true /* forceReload */);
-                    }
-                },
-                UserHandle.USER_ALL);
 
         if (!mIsMonetEnabled) {
             return;
@@ -630,7 +605,11 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
      * Given a color candidate, return an overlay definition.
      */
     protected @Nullable FabricatedOverlay getOverlay(int color, int type, Style style) {
-        mColorScheme = new ColorScheme(color, isNightMode(), style);
+        mColorScheme = new ColorScheme(color, isNightMode(), style,
+                fetchLuminanceFactorFromSetting(),
+                fetchChromaFactorFromSetting(),
+                fetchTintBackgroundFromSetting(),
+                fetchBgColorFromSetting());
         List<Integer> colorShades = type == ACCENT
                 ? mColorScheme.getAllAccentColors() : mColorScheme.getAllNeutralColors();
         String name = type == ACCENT ? "accent" : "neutral";
@@ -748,14 +727,6 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
         if (!categoryToPackage.containsKey(OVERLAY_CATEGORY_ACCENT_COLOR)
                 && mSecondaryOverlay != null) {
             categoryToPackage.put(OVERLAY_CATEGORY_ACCENT_COLOR, mSecondaryOverlay.getIdentifier());
-        }
-        
-        boolean isBlackMode = (LineageSettings.Secure.getIntForUser(
-                mContext.getContentResolver(), LineageSettings.Secure.BERRY_BLACK_THEME,
-                0, currentUser) == 1) && isNightMode();
-        if (categoryToPackage.containsKey(OVERLAY_CATEGORY_SYSTEM_PALETTE) && isBlackMode) {
-            OverlayIdentifier blackTheme = new OverlayIdentifier(OVERLAY_BERRY_BLACK_THEME);
-            categoryToPackage.put(OVERLAY_CATEGORY_SYSTEM_PALETTE, blackTheme);
         }
 
         Set<UserHandle> managedProfiles = new HashSet<>();
